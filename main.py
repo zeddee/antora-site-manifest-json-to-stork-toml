@@ -5,7 +5,8 @@ import xml.etree.ElementTree as ET
 
 pp = pprint.PrettyPrinter(width=41, compact=True).pprint
 
-DATA = "_data/sitemap.xml"
+# DATA = "_data/sitemap.xml"
+DATA = "_data/test.xml"
 SCHEMA = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
 
 
@@ -39,19 +40,27 @@ def getXMLroot(tree: ET.ElementTree) -> ET.Element:
     return root
 
 
+def parseElement(elem: ET.Element) -> Elem:
+    return Elem(
+                elem.tag,
+                elem.attrib,
+                elem.text,
+                )
+
+
 def traverselXML(parent: ET.ElementTree):
-    treeIter = parent.iter()
+    root = parent.getroot()
     elemList = list()
-    for elem in treeIter:
-        elemList.append(Elem(
-            elem.tag,
-            elem.attrib,
-            elem.text,
-        ).to_dict())
+    if len(root) and isinstance(root, ET.ElementTree):
+        # apparently we're not parsing children as children?
+        children = root.getchildren()
+        pp(children)
+    else:
+        for elem in root.iter():
+            elemList.append(parseElement(elem).to_dict())
     return elemList
 
 
 if __name__ == "__main__":
-    print(SCHEMA)
     tree = getXMLtree(DATA)
     pp(traverselXML(tree))
