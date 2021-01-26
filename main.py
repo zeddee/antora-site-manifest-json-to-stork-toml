@@ -63,4 +63,7 @@ def traverselXML(parent: ET.ElementTree):
 
 if __name__ == "__main__":
     tree = getXMLtree(DATA)
-    pp(traverselXML(tree))
+    output = traverselXML(tree)
+
+    with open("output.log", "w") as file:
+        file.write(f"{output}")
