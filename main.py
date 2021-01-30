@@ -1,8 +1,14 @@
 import pprint
 import json
+import os
 
 pf = pprint.PrettyPrinter(width=41, compact=True).pformat
 
+SITE_DIR = "".join((
+    f"{os.environ.get('HOME')}",
+    "/working/eiq/eiq-antora-monorepo/build/site"
+    ))
+STORK_INDEX_FILENAME = "eiq-antora.st"
 DATA = "_data/site-manifest.json"
 
 
@@ -13,7 +19,7 @@ class StorkFileItem:
             url: str,
             title: str,
             ):
-        self.path = path
+        self.path = "".join((SITE_DIR, url))
         self.url = url
         self.title = title
 
@@ -23,6 +29,15 @@ class StorkFileItem:
             "url": self.url,
             "title": self.title,
         }
+
+    # can't even use the toml package here
+    # because it dumps out the dict
+    # as newline separated and not comma separated
+    def to_toml(self) -> str:
+        return "".join((
+            f"{{path = \"{self.path}\", ",
+            f"url = \"{self.url}\", ",
+            f"title = \"{self.title}\"}}"))
 
 
 StorkFileList = list[dict]  # type alias
@@ -42,7 +57,12 @@ class StorkConfigRaw:
         self.files = files  # type: StorkFileList
 
         self.output_filename = output_filename  # type: str
-        self.debug = debug  # type: bool
+
+        # we can't even use the toml package to coerc bool types
+        # from python to toml because it just doesn't handle it.
+        # i.e. python bool ``False``` must be converted to ``false``
+        # for toml … but toml.dumps just doesn't do it.
+        self.debug = "true" if debug else "false"  # type: str
 
 
 class StorkToml:
@@ -52,8 +72,16 @@ class StorkToml:
             c.url_prefix and
             c.files and
             c.output_filename and
-            isinstance(c.debug, bool)
+            c.debug
         )
+
+        # cannot simply pass c.files through toml.dumps()
+        # to produce a toml list as per
+        # https://github.com/toml-lang/toml/blob/1.0.0-rc.3/toml.md#user-content-array
+        # because the standard that the toml package
+        # implements apparently uses an older standard
+        # (see https://github.com/uiri/toml/issues/320)
+
         return f"""# Generated from {__name__}
 
 [input]
@@ -110,23 +138,29 @@ def parse_sitmanifest(data: dict) -> StorkConfigRaw:
     :param data: dict from ``json.load("site-manifest.json")``.
     :returns: StorkConfigRaw
     """
-    file_list = []
+
+    # we must construct file_list as a string
+    # unelegantly, because the toml==0.10.2
+    # package does not allow dicts in toml lists.
+    # see earlier note in line 62
+    file_list = "["
     for component in data.get("components"):
         for version in component.get("versions"):
             for page in version.get("pages"):
-                file_list.append(
-                    StorkFileItem(
-                        page.get("path"),
-                        page.get("url"),
-                        page.get("title")
-                        ).to_dict()
-                )
+                thisfile = StorkFileItem(
+                    page.get('path'),
+                    page.get('url'),
+                    page.get('title')
+                    ).to_toml()
+                file_list = file_list + f"{thisfile}, "
+    file_list.rstrip(", ")
+    file_list = file_list + "]"
 
     return StorkConfigRaw(
-        base_directory="build/site",
-        url_prefix=data.get("url"),
+        base_directory=SITE_DIR,
+        url_prefix=data.get("url")+":5000",
         files=file_list,
-        output_filename="site-manifest.toml"
+        output_filename=STORK_INDEX_FILENAME
     )
 
 
@@ -146,6 +180,6 @@ if __name__ == "__main__":
     parsed_manifest = parse_sitmanifest(data)
     output_toml = StorkToml.new(parsed_manifest)
 
-    with open("output.log", "w") as file:
+    with open("../eiq-antora-monorepo/site-manifest.toml", "w") as file:
         file.write(f"{output_toml}")
         file.close()
